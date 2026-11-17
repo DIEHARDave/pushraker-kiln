@@ -1,0 +1,10 @@
+{
+  "name": "pushraker",
+  "description": "pushraker push notifications (ntfy, Pushover, Telegram, Discord, e-mail ... with snapshots), set up on its own web page at port 82",
+  "version": "1.0.0",
+  "author": "DIEHARDave (pushraker by noon92)",
+  "url": "https://github.com/DIEHARDave/pushraker-kiln",
+  "requires_os": "1.6",
+  "requires": [],
+  "conflicts": ["notify"]
+}
