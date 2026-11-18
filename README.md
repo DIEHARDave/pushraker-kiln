@@ -17,6 +17,10 @@ pip. This plugin ships the pushraker package with the pure-Python packages
 it needs in `python/`, the way kiln-notify ships Apprise. Kiln OS already
 has Pillow and Jinja2.
 
+<p align="center">
+  <img src="docs/images/settings-page.png" alt="pushraker settings page" width="480">
+</p>
+
 ## Discord cards
 
 A Discord message gets the status card fields that
@@ -39,6 +43,12 @@ without changing pushraker's files. If a pushraker release changes what it
 hooks into, pushraker's plain Discord message goes out instead. To turn the
 cards off, set `discord_cards: False` under `[pushraker_cards]` in the
 plugin's `moonraker.conf` and restart Moonraker.
+
+<p align="center">
+  <img src="docs/images/discord-started.png" alt="Print started card" width="300">
+  <img src="docs/images/discord-progress.png" alt="Progress card with camera snapshot" width="300">
+  <img src="docs/images/discord-complete.png" alt="Print complete card" width="300">
+</p>
 
 ## Install
 
