@@ -282,6 +282,26 @@ check(p["embeds"][0]["title"] == "Plain" and "fields" not in p["embeds"][0],
 cards.close()
 check(pr_discord._payload is real_payload, "close() puts _payload back")
 
+# If pushraker isn't importable when the cards load (zmod_pushraker: the
+# pushraker component puts the package on sys.path), they wrap at
+# component_init
+import pushraker as _pkg  # noqa: E402
+
+_saved = sys.modules.get("pushraker.discord")
+sys.modules["pushraker.discord"] = None
+delattr(_pkg, "discord")
+push = FakePush()
+late = pushraker_cards.load_component(FakeMRConfig(FakeServer(push)))
+sys.modules["pushraker.discord"] = _saved
+_pkg.discord = _saved
+check(pr_discord._payload is real_payload,
+      "pushraker not importable yet: nothing wrapped at load")
+asyncio.run(late.component_init())
+check(getattr(pr_discord._payload, "_kiln_card", False)
+      and getattr(push._attempts, "_kiln_card", False),
+      "wrapped at component_init once pushraker is importable")
+late.close()
+
 compiled = [os.path.join(dp, f) for dp, _, fs in os.walk(PY) for f in fs
             if f.endswith((".so", ".pyd"))]
 check(not compiled, "no compiled extensions in python/")
