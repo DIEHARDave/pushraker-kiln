@@ -1,5 +1,7 @@
 # pushraker-kiln
 
+> **Archived 2026-11-18.** This plugin is now part of [diehard-pushraker](https://github.com/DIEHARDave/diehard-pushraker), one plugin for Kiln OS, Zmod and the FLSUN T1 (same features, plus the update notices). Your notification settings carry over: see its README, *Moving from the old plugins*.
+
 [pushraker](https://github.com/noon92/pushraker) push notifications for
 **Kiln OS** (FlashForge AD5X), as a Kiln plugin.
 
