@@ -17,6 +17,29 @@ pip. This plugin ships the pushraker package with the pure-Python packages
 it needs in `python/`, the way kiln-notify ships Apprise. Kiln OS already
 has Pillow and Jinja2.
 
+## Discord cards
+
+A Discord message gets the status card fields that
+[notify-plus-kiln](https://github.com/DIEHARDave/notify-plus-kiln) added to
+kiln-notify, under pushraker's title and text:
+
+- Status, Extruder Temp and Bed Temp, side by side.
+- During a print: a progress bar, then Print Time, ETA (shown in each
+  reader's own time zone) and Layer, then File.
+- When a print ends: ✅ Completed or 🚫 Cancelled, with Total Time and File.
+- The printer's name and the time it was sent, in the footer.
+
+The color follows the printer: green while printing or complete, orange
+when paused, blue when ready. pushraker's error and failure notifications
+stay red. The camera snapshot stays inside the card, below the fields.
+
+A small Moonraker component does this
+(`moonraker/components/pushraker_cards.py`, the same as FLSUN_pushraker's),
+without changing pushraker's files. If a pushraker release changes what it
+hooks into, pushraker's plain Discord message goes out instead. To turn the
+cards off, set `discord_cards: False` under `[pushraker_cards]` in the
+plugin's `moonraker.conf` and restart Moonraker.
+
 ## Install
 
 Requires Kiln OS with plugin API 1.6 or later (v1.0.0). Over SSH as root
@@ -45,7 +68,8 @@ both would send for the same events. The plugin lists notify as a conflict.
 
 ## What it changes
 
-- **Moonraker:** loads the pushraker component (`moonraker/components`,
+- **Moonraker:** loads the pushraker component and the Discord card
+  component (`moonraker/components`,
   packages from `python/`). Settings: `printer_data/config/pushraker.conf`;
   tokens and passwords: `printer_data/pushraker.secrets` (outside the
   config folder, never served).

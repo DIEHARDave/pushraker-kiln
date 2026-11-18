@@ -177,6 +177,111 @@ check(r.returncode == 0,
       f"vendored packages import (apprise {r.stdout.strip()})"
       + ("" if r.returncode == 0 else "\n" + r.stderr[-800:]))
 
+# moonraker/components/pushraker_cards.py on pushraker's real
+# discord._payload, with a stand-in Moonraker and printer state
+import importlib.util  # noqa: E402
+
+sys.path.insert(0, PY)
+# By file: moonraker/components/pushraker.py (the shim) would shadow the
+# package if the folder were on sys.path
+_spec = importlib.util.spec_from_file_location(
+    "pushraker_cards",
+    os.path.join(HERE, "moonraker", "components", "pushraker_cards.py"))
+pushraker_cards = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(pushraker_cards)
+from pushraker import discord as pr_discord  # noqa: E402
+
+real_payload = pr_discord._payload
+
+
+class FakeLoop:
+    aioloop = None
+
+
+class FakeServer:
+    def __init__(self, push):
+        self.push = push
+
+    def get_event_loop(self):
+        return FakeLoop()
+
+    def lookup_component(self, name):
+        if name == "pushraker" and self.push is not None:
+            return self.push
+        raise KeyError(name)
+
+
+class FakeMRConfig:
+    def __init__(self, server):
+        self.server = server
+
+    def get_server(self):
+        return self.server
+
+    def getboolean(self, key, default):
+        return default
+
+
+class FakePush:
+    name = "AD5X-2"
+
+    async def _attempts(self, rid, dest, t, title, body, headers, path,
+                        result=None):
+        return pr_discord._payload(body, title, "info", {})
+
+
+import asyncio  # noqa: E402
+
+push = FakePush()
+cards = pushraker_cards.load_component(FakeMRConfig(FakeServer(push)))
+check(pr_discord._payload is not real_payload, "cards wrap discord._payload")
+asyncio.run(cards.component_init())
+check(getattr(push._attempts, "_kiln_card", False),
+      "cards wrap pushraker's _attempts")
+
+printing = {"status": {
+    "print_stats": {"state": "printing", "filename": "cube.gcode",
+                    "print_duration": 600, "info": {"current_layer": 12,
+                                                    "total_layer": 50}},
+    "display_status": {"progress": 0.4},
+    "extruder": {"temperature": 220.0, "target": 220.0},
+    "heater_bed": {"temperature": 60.0, "target": 60.0}},
+    "meta": {"estimated_time": 1500}, "name": "AD5X-2"}
+cards._state = lambda: printing
+p = pr_discord._payload("40% done\ncube.gcode", "Progress", "info", {})
+e = p["embeds"][0]
+names = [f["name"] for f in e.get("fields", [])]
+check(names == ["Status", "Extruder Temp", "Bed Temp", "Progress",
+                "Print Time", "ETA", "Layer", "File"],
+      f"printing card fields ({names})")
+check(e.get("color") == 0x00ff00, "printing card is green")
+check(e.get("footer", {}).get("text") == "AD5X-2", "printer name in footer")
+check("cube.gcode" not in e.get("description", ""),
+      "file line moved from the text to the File field")
+check(dict((f["name"], f["value"]) for f in e["fields"])["Layer"]
+      == "12 / 50", "layer from print_stats.info")
+
+# "complete" comes from the print-end hook while Klipper still says printing
+title = "Print complete"
+p = asyncio.run(push._attempts("complete", None, None, title, "done",
+                               {}, None))
+e = p["embeds"][0]
+fields = dict((f["name"], f["value"]) for f in e.get("fields", []))
+check(fields.get("Status") == "✅ Completed",
+      "complete card from the notification id, not Klipper's state")
+check("Progress" not in fields and fields.get("File") == "cube.gcode",
+      "complete card: no progress bar, file kept")
+
+p = pr_discord._payload("boom", "Error", "failure", {})
+check(p["embeds"][0]["color"] == 0xb02626, "failure card is red")
+
+cards._state = lambda: (_ for _ in ()).throw(RuntimeError("no state"))
+p = pr_discord._payload("plain", "Plain", "info", {})
+check(p["embeds"][0]["title"] == "Plain" and "fields" not in p["embeds"][0],
+      "a card error sends pushraker's own embed")
+cards.close()
+check(pr_discord._payload is real_payload, "close() puts _payload back")
+
 compiled = [os.path.join(dp, f) for dp, _, fs in os.walk(PY) for f in fs
             if f.endswith((".so", ".pyd"))]
 check(not compiled, "no compiled extensions in python/")
