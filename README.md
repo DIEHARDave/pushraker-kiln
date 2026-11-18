@@ -49,10 +49,13 @@ both would send for the same events. The plugin lists notify as a conflict.
   packages from `python/`). Settings: `printer_data/config/pushraker.conf`;
   tokens and passwords: `printer_data/pushraker.secrets` (outside the
   config folder, never served).
-- **Klipper:** pushraker's macros, plus wrappers around Kiln's `PRINT_END`
-  and `CANCEL_PRINT` that call `_PRINT_END_NTFY` / `_CANCEL_PRINT_NTFY`
-  first. The print-end and cancel snapshots are then taken before the
-  toolhead parks. Kiln's files are not touched.
+- **Klipper:** pushraker's macros, plus `[pushraker_hooks]`
+  (`extras/pushraker_hooks.py`), which makes Kiln's `PRINT_END` and
+  `CANCEL_PRINT` run `_PRINT_END_NTFY` / `_CANCEL_PRINT_NTFY` first. The
+  print-end and cancel snapshots are then taken before the toolhead parks.
+  Kiln's files are not touched. (A `[gcode_macro PRINT_END]` with
+  `rename_existing` can't do this: Klipper merges it into Kiln's section of
+  the same name.)
 - **nginx (root):** `/data/ad5x/nginx/pushraker.conf`, a server on port 82
   with the page and the Moonraker API it uses. `DISABLE_PLUGIN NAME=pushraker`
   removes it. The notification settings stay.

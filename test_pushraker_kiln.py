@@ -49,22 +49,122 @@ hooks = macros(inc_path)
 for h in ("_PRINT_END_NTFY", "_CANCEL_PRINT_NTFY", "_NTFY_HOOKS"):
     check(h in hooks, f"vendored macros define {h}")
 
+# A [gcode_macro X] for a macro Kiln defines would be merged into Kiln's
+# section (Klipper merges sections with the same name), not wrap it
+check(not re.search(r"^\[gcode_macro (PRINT_END|CANCEL_PRINT)\]", cfg_text,
+                    re.M), "plugin.cfg doesn't redefine Kiln's macros")
 cp = configparser.RawConfigParser(strict=False)
 cp.read_string(cfg_text.replace("[include ", "[x_include "))
-for name, hook, base in (("PRINT_END", "_PRINT_END_NTFY",
-                          "_PRINT_END_BEFORE_PUSHRAKER"),
-                         ("CANCEL_PRINT", "_CANCEL_PRINT_NTFY",
-                          "_CANCEL_PRINT_BEFORE_PUSHRAKER")):
-    sec = f"gcode_macro {name}"
-    check(cp.has_section(sec), f"wraps {name}")
-    if not cp.has_section(sec):
-        continue
-    check(cp.get(sec, "rename_existing") == base,
-          f"{name} renamed to {base}")
-    lines = [ln.strip() for ln in cp.get(sec, "gcode").splitlines()
-             if ln.strip()]
-    check(lines[:2] == [hook, f"{base} {{rawparams}}"],
-          f"{name} calls {hook} before the original")
+check(cp.has_section("pushraker_hooks"), "plugin.cfg has [pushraker_hooks]")
+
+
+# extras/pushraker_hooks.py against a stand-in Klipper
+sys.path.insert(0, os.path.join(HERE, "extras"))
+import pushraker_hooks  # noqa: E402
+
+
+class FakeConfigError(Exception):
+    pass
+
+
+class FakeGCmd:
+    def __init__(self, line):
+        self.line = line
+        self.info = []
+
+    def respond_info(self, msg):
+        self.info.append(msg)
+
+
+class FakeGCode:
+    def __init__(self, log, fail=()):
+        self.log, self.fail = log, fail
+        self.handlers = {}
+        self.gcode_help = {}
+
+    def register_command(self, cmd, func, when_not_ready=False, desc=None):
+        if func is None:
+            return self.handlers.pop(cmd, None)
+        assert cmd not in self.handlers, cmd
+        self.handlers[cmd] = func
+        if desc is not None:
+            self.gcode_help[cmd] = desc
+
+    def run_script_from_command(self, script):
+        self.log.append(script)
+        if script in self.fail:
+            raise RuntimeError("boom")
+
+
+class FakePrinter:
+    def __init__(self, gcode, macros):
+        self.gcode, self.macros, self.events = gcode, macros, {}
+
+    def register_event_handler(self, ev, cb):
+        self.events[ev] = cb
+
+    def lookup_object(self, name, default=Exception):
+        if name == "gcode":
+            return self.gcode
+        if name.startswith("gcode_macro ") and name[12:] in self.macros:
+            return object()
+        if default is Exception:
+            raise KeyError(name)
+        return default
+
+
+class FakeConfig:
+    error = FakeConfigError
+
+    def __init__(self, printer, wrap):
+        self.printer, self.wrap = printer, wrap
+
+    def get_printer(self):
+        return self.printer
+
+    def get(self, key, default=None):
+        return self.wrap if key == "wrap" and self.wrap else default
+
+
+def setup(fail=(), macros=("_PRINT_END_NTFY", "_CANCEL_PRINT_NTFY")):
+    log = []
+    gc = FakeGCode(log, fail)
+    for cmd in ("PRINT_END", "CANCEL_PRINT"):
+        gc.register_command(cmd, lambda g, c=cmd: log.append(c),
+                            desc=cmd.lower())
+    pr = FakePrinter(gc, macros)
+    obj = pushraker_hooks.load_config(
+        FakeConfig(pr, cp.get("pushraker_hooks", "wrap")))
+    pr.events["klippy:ready"]()
+    return obj, gc, log
+
+
+obj, gc, log = setup()
+check(obj.get_status(0)["wrapped"] == ["PRINT_END", "CANCEL_PRINT"],
+      "wraps PRINT_END and CANCEL_PRINT")
+gc.handlers["PRINT_END"](FakeGCmd("PRINT_END"))
+gc.handlers["CANCEL_PRINT"](FakeGCmd("CANCEL_PRINT"))
+check(log == ["_PRINT_END_NTFY", "PRINT_END",
+              "_CANCEL_PRINT_NTFY", "CANCEL_PRINT"],
+      "hook runs before the original command")
+check(gc.gcode_help.get("PRINT_END") == "print_end", "help text kept")
+
+obj, gc, log = setup(fail=("_PRINT_END_NTFY",))
+g = FakeGCmd("PRINT_END")
+gc.handlers["PRINT_END"](g)
+check(log == ["_PRINT_END_NTFY", "PRINT_END"] and g.info,
+      "a failing hook still runs the original, with a console note")
+
+obj, gc, log = setup(macros=())
+check(obj.get_status(0)["wrapped"] == [], "no hook macros: nothing wrapped")
+gc.handlers["PRINT_END"](FakeGCmd("PRINT_END"))
+check(log == ["PRINT_END"], "unwrapped command still works")
+
+try:
+    pushraker_hooks.load_config(FakeConfig(FakePrinter(None, ()), "BAD"))
+    check(False, "bad wrap option rejected")
+except FakeConfigError:
+    check(True, "bad wrap option rejected")
 
 # The imports run in a child Python so this one stays clean
 code = ("import sys; sys.path.insert(0, sys.argv[1]);"
