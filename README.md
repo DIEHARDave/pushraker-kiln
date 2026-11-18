@@ -96,6 +96,11 @@ restart or a reboot.
   with pip): py3-none-any wheels only, PyYAML built without its C
   extension, then applies the fixes listed in `PATCHES` (a settings page
   fix for printers without the U1's filament change row, sent upstream).
+- New pushraker releases are picked up by a daily check
+  (`.github/workflows/pushraker-release.yml`). It opens a pull request
+  that re-vendors `python/` and reports the page fix and test results.
+  Try it on a printer before merging (the PR says how), then bump
+  `plugin.json` and tag.
 - `python test_pushraker_kiln.py`: offline checks (macro wrappers,
   vendored imports, nginx config).
 - The first Moonraker start after an install or update compiles the
